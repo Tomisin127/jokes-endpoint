@@ -61,20 +61,31 @@ function assertEnv(): { payTo: string } {
 
 // --- Resource server: CDP facilitator + Base "exact" scheme -------------------
 
-// Validate environment and initialize resource server
-function initResourceServer() {
+// Validate environment and initialize resource server (lazy, on first request)
+let resourceServer: InstanceType<typeof x402ResourceServer> | null = null
+let initError: Error | null = null
+let initAttempted = false
+
+function getResourceServer() {
+  if (initAttempted) {
+    if (initError) throw initError
+    return resourceServer
+  }
+
+  initAttempted = true
+
   try {
     assertEnv()
+    resourceServer = new x402ResourceServer(
+      new HTTPFacilitatorClient(facilitator),
+    ).register(BASE_MAINNET, new ExactEvmScheme())
+    return resourceServer
   } catch (error) {
-    console.error("[x402] Environment validation failed:", error instanceof Error ? error.message : String(error))
+    initError = error instanceof Error ? error : new Error(String(error))
+    console.error("[x402] Failed to initialize resource server:", initError.message)
+    throw initError
   }
-  
-  return new x402ResourceServer(
-    new HTTPFacilitatorClient(facilitator),
-  ).register(BASE_MAINNET, new ExactEvmScheme())
 }
-
-const resourceServer = initResourceServer()
 
 // --- Route payment config -----------------------------------------------------
 
@@ -84,7 +95,7 @@ const routeConfig: RouteConfig = {
     scheme: "exact",
     network: BASE_MAINNET,
     price: "$0.01",
-    payTo: PAY_TO_ADDRESS || "",
+    payTo: PAY_TO_ADDRESS || "0x1234567890123456789012345678901234567890",
   },
   description: "Returns a random interesting joke.",
   mimeType: "application/json",
@@ -135,4 +146,20 @@ async function handler(_request: NextRequest) {
 // Protect the GET route behind x402. Unpaid requests get HTTP 402 with a valid
 // payment-requirements challenge (including the builder-code extension); valid
 // payments settle through the CDP facilitator and return the joke JSON.
-export const GET = withX402(handler, routeConfig, resourceServer)
+export const GET = async (request: NextRequest) => {
+  try {
+    const server = getResourceServer()
+    return withX402(handler, routeConfig, server)(request)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("[x402] Request failed:", message)
+    return NextResponse.json(
+      {
+        error: "Service Unavailable",
+        message: message,
+        details: "Failed to initialize payment service. Please check CDP credentials.",
+      },
+      { status: 503 }
+    )
+  }
+}
