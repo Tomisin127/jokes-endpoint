@@ -35,10 +35,8 @@ const BASE_MAINNET = "eip155:8453" as const
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET
 const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS
-// Replace this default with your real Base Builder Code (get one at
-// https://dashboard.base.org -> Settings -> Builder Codes). Must match
-// ^[a-z0-9_]{1,32}$ (e.g. "bc_b7k3p9da").
-const MY_BUILDER_CODE = process.env.BUILDER_CODE ?? "your_builder_code"
+// Base Builder Code for attribution (ERC-8021). Set via environment variable.
+const MY_BUILDER_CODE = process.env.BUILDER_CODE ?? "bc_95iwepxu"
 
 /**
  * Validate required environment up front so misconfiguration fails loudly with a
@@ -63,12 +61,20 @@ function assertEnv(): { payTo: string } {
 
 // --- Resource server: CDP facilitator + Base "exact" scheme -------------------
 
-const { payTo } = assertEnv()
+// Validate environment and initialize resource server
+function initResourceServer() {
+  try {
+    assertEnv()
+  } catch (error) {
+    console.error("[x402] Environment validation failed:", error instanceof Error ? error.message : String(error))
+  }
+  
+  return new x402ResourceServer(
+    new HTTPFacilitatorClient(facilitator),
+  ).register(BASE_MAINNET, new ExactEvmScheme())
+}
 
-const resourceServer = new x402ResourceServer(
-  // `facilitator` reads CDP_API_KEY_ID / CDP_API_KEY_SECRET from the env.
-  new HTTPFacilitatorClient(facilitator),
-).register(BASE_MAINNET, new ExactEvmScheme())
+const resourceServer = initResourceServer()
 
 // --- Route payment config -----------------------------------------------------
 
@@ -78,7 +84,7 @@ const routeConfig: RouteConfig = {
     scheme: "exact",
     network: BASE_MAINNET,
     price: "$0.01",
-    payTo,
+    payTo: PAY_TO_ADDRESS || "",
   },
   description: "Returns a random interesting joke.",
   mimeType: "application/json",
