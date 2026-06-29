@@ -15,8 +15,10 @@ import { facilitator } from "@coinbase/x402"
 // Builder Code (ERC-8021) attribution extension. The `BUILDER_CODE` constant is
 // the keyed extension id ("builder-code"); `declareBuilderCodeExtension` returns
 // an UNKEYED { info, schema } object that MUST live under that key.
+// `builderCodeResourceServerExtension` registers the resource server side handler.
 import {
   BUILDER_CODE,
+  builderCodeResourceServerExtension,
   declareBuilderCodeExtension,
 } from "@x402/extensions/builder-code"
 // Bazaar discovery extension so agents can discover this endpoint. Unlike the
@@ -78,7 +80,9 @@ function getResourceServer() {
     assertEnv()
     resourceServer = new x402ResourceServer(
       new HTTPFacilitatorClient(facilitator),
-    ).register(BASE_MAINNET, new ExactEvmScheme())
+    )
+      .register(BASE_MAINNET, new ExactEvmScheme())
+      .registerExtension(builderCodeResourceServerExtension)
     return resourceServer
   } catch (error) {
     initError = error instanceof Error ? error : new Error(String(error))
@@ -102,10 +106,10 @@ const routeConfig: RouteConfig = {
   serviceName: "Random Joke API",
   tags: ["jokes", "entertainment", "fun"],
   extensions: {
-    // KEYED entry: builder-code attribution. The facilitator will append the
-    // ERC-8021 suffix (our app code) to the settlement transaction calldata.
+    // KEYED entry: builder-code attribution (ERC-8021). The facilitator will append the
+    // full ERC-8021 suffix including the marker to the settlement transaction calldata.
     [BUILDER_CODE]: declareBuilderCodeExtension(MY_BUILDER_CODE),
-    // SPREAD: discovery extension already returns a keyed object.
+    // SPREAD: discovery extension for Bazaar marketplace integration.
     ...declareDiscoveryExtension({
       output: {
         example: { joke: "I told my computer I needed a break — it said no problem, it'll go to sleep." },
