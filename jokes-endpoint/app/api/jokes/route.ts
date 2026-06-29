@@ -117,6 +117,7 @@ const routeConfig: RouteConfig = {
     // SPREAD: Bazaar discovery extension for agent marketplace discoverability.
     // Agents and tools can discover this endpoint through the Bazaar protocol.
     ...declareDiscoveryExtension({
+      routeTemplate: "/api/jokes",
       input: {
         method: "GET",
       },
