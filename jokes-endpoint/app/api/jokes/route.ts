@@ -24,7 +24,11 @@ import {
 // Bazaar discovery extension so agents can discover this endpoint. Unlike the
 // builder-code helper, `declareDiscoveryExtension` returns an already-KEYED
 // object, so it is SPREAD into `extensions` rather than nested under a key.
-import { declareDiscoveryExtension } from "@x402/extensions/bazaar"
+// `bazaarResourceServerExtension` registers the resource server side handler for discovery.
+import {
+  bazaarResourceServerExtension,
+  declareDiscoveryExtension,
+} from "@x402/extensions/bazaar"
 
 // The CDP facilitator signs requests with Node crypto, so run on the Node runtime.
 export const runtime = "nodejs"
@@ -83,6 +87,7 @@ function getResourceServer() {
     )
       .register(BASE_MAINNET, new ExactEvmScheme())
       .registerExtension(builderCodeResourceServerExtension)
+      .registerExtension(bazaarResourceServerExtension)
     return resourceServer
   } catch (error) {
     initError = error instanceof Error ? error : new Error(String(error))
@@ -109,13 +114,18 @@ const routeConfig: RouteConfig = {
     // KEYED entry: builder-code attribution (ERC-8021). The facilitator will append the
     // full ERC-8021 suffix including the marker to the settlement transaction calldata.
     [BUILDER_CODE]: declareBuilderCodeExtension(MY_BUILDER_CODE),
-    // SPREAD: discovery extension for Bazaar marketplace integration.
+    // SPREAD: Bazaar discovery extension for agent marketplace discoverability.
+    // Agents and tools can discover this endpoint through the Bazaar protocol.
     ...declareDiscoveryExtension({
+      type: "body",
+      description: "Get a random interesting joke. Perfect for entertainment, icebreakers, and comic relief.",
+      tags: ["jokes", "entertainment", "fun", "humor", "random"],
       output: {
+        mimeType: "application/json",
         example: { joke: "I told my computer I needed a break — it said no problem, it'll go to sleep." },
         schema: {
           type: "object",
-          properties: { joke: { type: "string" } },
+          properties: { joke: { type: "string", description: "A random interesting joke" } },
           required: ["joke"],
         },
       },
