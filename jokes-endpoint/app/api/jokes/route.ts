@@ -117,18 +117,11 @@ const routeConfig: RouteConfig = {
     // SPREAD: Bazaar discovery extension for agent marketplace discoverability.
     // Agents and tools can discover this endpoint through the Bazaar protocol.
     ...declareDiscoveryExtension({
-      routeTemplate: "/api/jokes",
-      input: {
-        method: "GET",
-      },
-      description: "Get a random interesting joke. Perfect for entertainment, icebreakers, and comic relief.",
-      tags: ["jokes", "entertainment", "fun", "humor", "random"],
       output: {
-        mimeType: "application/json",
         example: { joke: "I told my computer I needed a break — it said no problem, it'll go to sleep." },
         schema: {
           type: "object",
-          properties: { joke: { type: "string", description: "A random interesting joke" } },
+          properties: { joke: { type: "string" } },
           required: ["joke"],
         },
       },
