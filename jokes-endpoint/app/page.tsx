@@ -28,15 +28,7 @@ export default function Page() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-lg border border-border p-5">
-        <h2 className="text-sm font-semibold">Required environment variables</h2>
-        <ul className="flex flex-col gap-1 font-mono text-sm text-muted-foreground">
-          <li>CDP_API_KEY_ID</li>
-          <li>CDP_API_KEY_SECRET</li>
-          <li>PAY_TO_ADDRESS</li>
-          <li>BUILDER_CODE</li>
-        </ul>
-      </section>
+
     </main>
   )
 }

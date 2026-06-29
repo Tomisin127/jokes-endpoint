@@ -15,14 +15,20 @@ import { facilitator } from "@coinbase/x402"
 // Builder Code (ERC-8021) attribution extension. The `BUILDER_CODE` constant is
 // the keyed extension id ("builder-code"); `declareBuilderCodeExtension` returns
 // an UNKEYED { info, schema } object that MUST live under that key.
+// `builderCodeResourceServerExtension` registers the resource server side handler.
 import {
   BUILDER_CODE,
+  builderCodeResourceServerExtension,
   declareBuilderCodeExtension,
 } from "@x402/extensions/builder-code"
 // Bazaar discovery extension so agents can discover this endpoint. Unlike the
 // builder-code helper, `declareDiscoveryExtension` returns an already-KEYED
 // object, so it is SPREAD into `extensions` rather than nested under a key.
-import { declareDiscoveryExtension } from "@x402/extensions/bazaar"
+// `bazaarResourceServerExtension` registers the resource server side handler for discovery.
+import {
+  bazaarResourceServerExtension,
+  declareDiscoveryExtension,
+} from "@x402/extensions/bazaar"
 
 // The CDP facilitator signs requests with Node crypto, so run on the Node runtime.
 export const runtime = "nodejs"
@@ -35,10 +41,8 @@ const BASE_MAINNET = "eip155:8453" as const
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET
 const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS
-// Replace this default with your real Base Builder Code (get one at
-// https://dashboard.base.org -> Settings -> Builder Codes). Must match
-// ^[a-z0-9_]{1,32}$ (e.g. "bc_b7k3p9da").
-const MY_BUILDER_CODE = process.env.BUILDER_CODE ?? "your_builder_code"
+// Base Builder Code for attribution (ERC-8021). Set via environment variable.
+const MY_BUILDER_CODE = process.env.BUILDER_CODE ?? "bc_95iwepxu"
 
 /**
  * Validate required environment up front so misconfiguration fails loudly with a
@@ -63,12 +67,34 @@ function assertEnv(): { payTo: string } {
 
 // --- Resource server: CDP facilitator + Base "exact" scheme -------------------
 
-const { payTo } = assertEnv()
+// Validate environment and initialize resource server (lazy, on first request)
+let resourceServer: InstanceType<typeof x402ResourceServer> | null = null
+let initError: Error | null = null
+let initAttempted = false
 
-const resourceServer = new x402ResourceServer(
-  // `facilitator` reads CDP_API_KEY_ID / CDP_API_KEY_SECRET from the env.
-  new HTTPFacilitatorClient(facilitator),
-).register(BASE_MAINNET, new ExactEvmScheme())
+function getResourceServer() {
+  if (initAttempted) {
+    if (initError) throw initError
+    return resourceServer
+  }
+
+  initAttempted = true
+
+  try {
+    assertEnv()
+    resourceServer = new x402ResourceServer(
+      new HTTPFacilitatorClient(facilitator),
+    )
+      .register(BASE_MAINNET, new ExactEvmScheme())
+      .registerExtension(builderCodeResourceServerExtension)
+      .registerExtension(bazaarResourceServerExtension)
+    return resourceServer
+  } catch (error) {
+    initError = error instanceof Error ? error : new Error(String(error))
+    console.error("[x402] Failed to initialize resource server:", initError.message)
+    throw initError
+  }
+}
 
 // --- Route payment config -----------------------------------------------------
 
@@ -78,23 +104,30 @@ const routeConfig: RouteConfig = {
     scheme: "exact",
     network: BASE_MAINNET,
     price: "$0.01",
-    payTo,
+    payTo: PAY_TO_ADDRESS || "0x1234567890123456789012345678901234567890",
   },
   description: "Returns a random interesting joke.",
   mimeType: "application/json",
   serviceName: "Random Joke API",
   tags: ["jokes", "entertainment", "fun"],
   extensions: {
-    // KEYED entry: builder-code attribution. The facilitator will append the
-    // ERC-8021 suffix (our app code) to the settlement transaction calldata.
+    // KEYED entry: builder-code attribution (ERC-8021). The facilitator will append the
+    // full ERC-8021 suffix including the marker to the settlement transaction calldata.
     [BUILDER_CODE]: declareBuilderCodeExtension(MY_BUILDER_CODE),
-    // SPREAD: discovery extension already returns a keyed object.
+    // SPREAD: Bazaar discovery extension for agent marketplace discoverability.
+    // Agents and tools can discover this endpoint through the Bazaar protocol.
     ...declareDiscoveryExtension({
+      input: {
+        method: "GET",
+      },
+      description: "Get a random interesting joke. Perfect for entertainment, icebreakers, and comic relief.",
+      tags: ["jokes", "entertainment", "fun", "humor", "random"],
       output: {
+        mimeType: "application/json",
         example: { joke: "I told my computer I needed a break — it said no problem, it'll go to sleep." },
         schema: {
           type: "object",
-          properties: { joke: { type: "string" } },
+          properties: { joke: { type: "string", description: "A random interesting joke" } },
           required: ["joke"],
         },
       },
@@ -129,4 +162,20 @@ async function handler(_request: NextRequest) {
 // Protect the GET route behind x402. Unpaid requests get HTTP 402 with a valid
 // payment-requirements challenge (including the builder-code extension); valid
 // payments settle through the CDP facilitator and return the joke JSON.
-export const GET = withX402(handler, routeConfig, resourceServer)
+export const GET = async (request: NextRequest) => {
+  try {
+    const server = getResourceServer()
+    return withX402(handler, routeConfig, server)(request)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("[x402] Request failed:", message)
+    return NextResponse.json(
+      {
+        error: "Service Unavailable",
+        message: message,
+        details: "Failed to initialize payment service. Please check CDP credentials.",
+      },
+      { status: 503 }
+    )
+  }
+}
