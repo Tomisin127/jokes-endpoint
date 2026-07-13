@@ -25,7 +25,7 @@ export const BUILDER_CODE = "bc_95iwepxu" as const
  * Price per request, expressed in USD. The CDP facilitator resolves "$" prices
  * to USDC on Base mainnet.
  */
-export const PRICE = "$0.01" as const
+export const PRICE = "$0.002" as const
 
 if (!process.env.CDP_API_KEY_ID || !process.env.CDP_API_KEY_SECRET) {
   console.error("[x402] Missing CDP_API_KEY_ID / CDP_API_KEY_SECRET — required for the CDP facilitator.")
